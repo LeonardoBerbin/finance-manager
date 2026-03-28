@@ -1,11 +1,11 @@
-version '3.8'
+version: '3.8'
 
 services:
   db:
     image: postgres:15
     container_name: fmdb
     restart: always
-    enviroment:
+    environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: fmdb
