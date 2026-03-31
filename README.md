@@ -9,6 +9,11 @@ Personal finance manager built with modern fullstack architecture.
 - Database: PostgreSQL
 - Auth: JWT
 
+## Requirements
+
+- Docker
+- Docker Compose V2 (`docker compose`)
+
 ## Getting Started
 
 ### 1. Clone repo
