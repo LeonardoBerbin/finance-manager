@@ -14,7 +14,9 @@ CREATE TABLE currencies (
     name VARCHAR(255) NOT NULL,
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT code_format CHECK (code ~ '^[A-Z]{3}$')
 );
 
 ALTER TABLE currencies ENABLE ROW LEVEL SECURITY;
@@ -37,9 +39,9 @@ CREATE TABLE exchange_rates (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-    constraint exchange_rates_pkey PRIMARY KEY (base_currency_id, target_currency_id),
-    constraint exchange_rates_check CHECK (base_currency_id <> target_currency_id),
-    constraint exchange_rates_rate_positive CHECK (rate > 0)
+    CONSTRAINT exchange_rates_pkey PRIMARY KEY (base_currency_id, target_currency_id),
+    CONSTRAINT exchange_rates_check CHECK (base_currency_id <> target_currency_id),
+    CONSTRAINT exchange_rates_rate_positive CHECK (rate > 0)
 );
 
 ALTER TABLE exchange_rates ENABLE ROW LEVEL SECURITY;
