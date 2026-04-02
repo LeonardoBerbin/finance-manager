@@ -8,6 +8,8 @@ DROP TABLE IF EXISTS currencies CASCADE;
 
 -- CREATE SCHEMA
 
+-- CURRENCIES DEFINITION
+
 CREATE TABLE currencies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     code CHAR(3) NOT NULL UNIQUE,
@@ -16,6 +18,7 @@ CREATE TABLE currencies (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
+    CONSTRAINT name_length CHECK (char_length(name) > 0),
     CONSTRAINT code_format CHECK (code ~ '^[A-Z]{3}$')
 );
 
@@ -31,6 +34,8 @@ CREATE TRIGGER update_currency_timestamp
 BEFORE UPDATE ON currencies
 FOR EACH ROW
 EXECUTE FUNCTION update_timestamp();
+
+-- EXCHANGE RATES DEFINITION
 
 CREATE TABLE exchange_rates (
     base_currency_id UUID REFERENCES currencies(id) ON DELETE RESTRICT NOT NULL,

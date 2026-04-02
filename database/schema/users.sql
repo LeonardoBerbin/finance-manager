@@ -3,11 +3,15 @@
 
 -- RESET SCHEMA
 
+DROP TYPE IF EXISTS languages;
+DROP TYPE IF EXISTS themes;
 DROP TABLE IF EXISTS user_settings CASCADE;
 DROP TABLE IF EXISTS user_sessions CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 
 -- CREATE SCHEMA
+
+-- USERS DEFINITION
 
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -19,9 +23,9 @@ CREATE TABLE users (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-    CONSTRAINT name_format CHECK (char_length(name) >= 2),
+    CONSTRAINT name_length CHECK (char_length(name) > 0),
     CONSTRAINT email_format CHECK (email ~ '^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$'),
-    CONSTRAINT phone_format CHECK (phone IS NULL OR phone ~ '^\+?[1-9]\d{1,14}$')
+    CONSTRAINT phone_format CHECK (phone IS NULL OR phone ~ '^\+[1-9]\d{7,14}$')
 );
 
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
@@ -34,6 +38,7 @@ BEFORE UPDATE ON users
 FOR EACH ROW
 EXECUTE FUNCTION update_timestamp();
 
+-- SESSIONS DEFINITION
 
 CREATE TABLE user_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -53,6 +58,8 @@ COMMENT ON COLUMN user_sessions.token IS 'Unique session token (should be stored
 CREATE INDEX idx_user_sessions_user_id 
 ON user_sessions (user_id);
 
+-- SETTINGS DEFINITION
+
 CREATE TYPE languages AS ENUM ('en', 'es');
 CREATE TYPE themes AS ENUM ('light', 'dark');
 
@@ -60,9 +67,8 @@ COMMENT ON TYPE languages IS 'Supported application languages';
 COMMENT ON TYPE themes IS 'Available UI themes';
 
 CREATE TABLE user_settings (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE UNIQUE NOT NULL,
-    default_currency_id UUID REFERENCES currencies(id) ON DELETE SET NULL,
+    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    default_currency_id UUID REFERENCES currencies(id) ON DELETE RESTRICT,
     language languages NOT NULL DEFAULT 'en',
     theme themes NOT NULL DEFAULT 'light',
     timezone VARCHAR(50) NOT NULL DEFAULT 'UTC',

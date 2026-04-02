@@ -1,6 +1,8 @@
 -- SCHEMA: Global Functions (database/scheme/functions.sql)
 ---------------------------------------------------------------------------------------------------------------
 
+-- UPDATE TIMESTAMP FUNCTION
+
 CREATE OR REPLACE FUNCTION update_timestamp()
 RETURNS TRIGGER AS $$
 BEGIN
