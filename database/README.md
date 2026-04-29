@@ -20,12 +20,13 @@ This directory contains all database-related scripts, organized for **clarity, m
   * `functions.sql` → Shared database functions (e.g., timestamp triggers)
   * `currencies.sql` → Currencies and exchange rates
   * `users.sql` → Users, sessions, and user settings
+  * `accounts.sql` → Financial accounts, account types, and flexible account settings
 
 * `database/seeds/`
-  ...
+  (future) Initial data population (e.g., default currencies, account types)
 
 * `database/migrations`
-  ...
+  (future) Versioned schema evolution scripts
 
 ---
 
@@ -57,10 +58,10 @@ The database is initialized through a **single entrypoint**:
   * Avoids business logic duplication
 
 * **Backend-driven normalization**
-  Formatting (e.g., casing, trimming) is handled in the application layer
+  Data formatting, validation rules, and business logic are handled in the application layer.
 
 * **Extensible structure**
-  New modules can be added without modifying existing ones
+  New domains (e.g., transactions, investments, loans) can be added without modifying existing modules.
 
 ---
 
@@ -86,7 +87,8 @@ The database is initialized through a **single entrypoint**:
 ## Notes
 
 * All timestamps use `TIMESTAMPTZ` (UTC-based)
-* Row Level Security (RLS) is enabled where applicable
+* Row Level Security (RLS) is enabled where applicable (to be configured per module)
 * Constraints are used for **data integrity**, not business logic
+* The **accounts** module introduces a behavioral model layer via **account_types** and **account_settings**
 
 ---
