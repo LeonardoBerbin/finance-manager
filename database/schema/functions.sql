@@ -1,7 +1,6 @@
--- SCHEMA: Global Functions (database/scheme/functions.sql)
 ---------------------------------------------------------------------------------------------------------------
-
 -- UPDATE TIMESTAMP FUNCTION
+---------------------------------------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION update_timestamp()
 RETURNS TRIGGER AS $$
@@ -11,5 +10,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-COMMENT ON FUNCTION update_timestamp() IS
-'Trigger function that automatically updates the "updated_at" column to the current timestamp on row updates';
+COMMENT ON FUNCTION update_timestamp() IS 
+'Generic trigger function that automatically updates the "updated_at" column to the current timestamp on row updates. 
+Requires target table to include an updated_at column.';
