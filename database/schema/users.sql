@@ -73,11 +73,9 @@ CREATE INDEX idx_user_sessions_token ON user_sessions (token);
 CREATE TABLE user_settings (
     user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     default_currency_id UUID REFERENCES currencies(id) ON DELETE RESTRICT,
-
     language VARCHAR(5) NOT NULL DEFAULT 'en',
     timezone VARCHAR(50) NOT NULL DEFAULT 'UTC',
     theme VARCHAR(50) NOT NULL DEFAULT 'light',
-
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 

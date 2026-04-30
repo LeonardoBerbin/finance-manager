@@ -6,27 +6,27 @@ This directory contains all database-related scripts, organized for **clarity, m
 
 ## Folder Structure
 
-* `database/`
+- `database/`  
   Root database folder. Contains the initialization entrypoint.
 
-* `database/init.sql`
+- `database/init.sql`  
   Master script that orchestrates the full database setup.
 
-* `database/schema/`
+- `database/schema/`  
   Contains all schema definitions (tables, types, triggers, etc.).
 
   Current modules:
 
-  * `functions.sql` → Shared database functions (e.g., timestamp triggers)
-  * `currencies.sql` → Currencies and exchange rates
-  * `users.sql` → Users, sessions, and user settings
-  * `accounts.sql` → Financial accounts, account types, and flexible account settings
+  - `functions.sql` → Shared database functions (e.g., timestamp triggers, JSON schema helpers)
+  - `currencies.sql` → Currencies and exchange rates
+  - `users.sql` → Users, sessions, and user settings
+  - `accounts.sql` → Financial accounts, account types, and flexible metadata system
 
-* `database/seeds/`
-  (future) Initial data population (e.g., default currencies, account types)
+- `database/seeds/`  
+  *(future)* Initial data population (e.g., default currencies, account types)
 
-* `database/migrations`
-  (future) Versioned schema evolution scripts
+- `database/migrations/`  
+  *(future)* Versioned schema evolution scripts
 
 ---
 
@@ -38,6 +38,7 @@ The database is initialized through a **single entrypoint**:
 \i /docker-entrypoint-initdb.d/schema/functions.sql
 \i /docker-entrypoint-initdb.d/schema/currencies.sql
 \i /docker-entrypoint-initdb.d/schema/users.sql
+\i /docker-entrypoint-initdb.d/schema/accounts.sql
 ...
 ```
 
@@ -45,23 +46,79 @@ The database is initialized through a **single entrypoint**:
 
 ## Design Principles
 
-* **Modular schema**
+**Modular schema**
+  
   Each domain is isolated in its own file
 
-* **Single source of truth**
+---
+
+**Single source of truth**
+  
   `init.sql` controls execution order
 
-* **Database responsibility is minimal**
+---
 
-  * Enforces integrity (constraints, relations)
-  * Handles timestamps and critical rules
-  * Avoids business logic duplication
+**Database responsibility is minimal but strict**
+  
+  The database is responsible for:
 
-* **Backend-driven normalization**
-  Data formatting, validation rules, and business logic are handled in the application layer.
+  * Enforcing data integrity (constraints, foreign keys)
+  * Handling timestamps and system-level automation
+  * Ensuring structural consistency of stored data
 
-* **Extensible structure**
+  The database intentionally avoids:
+
+  * Business logic
+  * Financial calculations
+  * Application workflows
+
+---
+
+**Backend-driven normalization**
+
+  All business rules and interpretations are handled in the backend:
+
+  * Financial operations
+  * Validation of dynamic metadata
+  * Account behavior logic
+  * Data transformation and formatting
+
+---
+
+**Controlled flexibility (JSONB-based design)**
+  
+  The system uses a hybrid model:
+
+  * Structured columns → critical financial data (balances, relations)
+  * JSONB metadata → flexible, non-critical configuration
+
+  Each account type defines a metadata contract used by the backend to interpret and validate account behavior.
+
+  This allows:
+
+  * Flexible account definitions
+  * No schema migrations for new attributes
+  * Extensible financial modeling
+
+---
+
+**Performance-aware design**
+  * Indexes are aligned with query patterns, not just schema structure
+  * JSONB fields use GIN indexes for flexible querying
+  * Generated fields are used for frequently accessed attributes
+  * User-scoped indexes optimize multi-tenant queries
+
+---
+
+**Extensible structure**
+  
   New domains (e.g., transactions, investments, loans) can be added without modifying existing modules.
+  
+  The system evolves through:
+
+  * New schema modules
+  * Backend-driven behavior extensions
+  * JSON-based metadata evolution
 
 ---
 
@@ -86,9 +143,11 @@ The database is initialized through a **single entrypoint**:
 
 ## Notes
 
-* All timestamps use `TIMESTAMPTZ` (UTC-based)
-* Row Level Security (RLS) is enabled where applicable (to be configured per module)
-* Constraints are used for **data integrity**, not business logic
-* The **accounts** module introduces a behavioral model layer via **account_types** and **account_settings**
+* All timestamps use TIMESTAMPTZ (UTC-based)
+* Row Level Security (RLS) is enabled where applicable (policies defined in backend)
+* Constraints are used strictly for data integrity, not business logic
+* The accounts module introduces a flexible behavior model via:
+    * account_types.metadata_definition
+    * accounts.metadata
 
 ---
