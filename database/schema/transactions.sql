@@ -1,6 +1,6 @@
 
-CREATE TYPE transaction_types AS ENUM ('income', 'expense', 'transfer', 'adjustment');
-CREATE TYPE transaction_status AS ENUM ('cancel', 'completed', 'scheduled', 'recurring_scheduled');
+CREATE TYPE transaction_types AS ENUM ();
+CREATE TYPE transaction_status AS ENUM ();
 
 CREATE TABLE invoices (
 
@@ -8,8 +8,12 @@ CREATE TABLE invoices (
 
 
 
-transactions
+CREATE TABLE transactions (
+
+);
 
 
 
-entries
+CREATE TABLE entries (
+
+);
