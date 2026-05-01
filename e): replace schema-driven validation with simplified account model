@@ -1,0 +1,184 @@
+[1mdiff --git a/database/schema/functions.sql b/database/schema/functions.sql[m
+[1mindex 0e4d9b6..8f88ed7 100644[m
+[1m--- a/database/schema/functions.sql[m
+[1m+++ b/database/schema/functions.sql[m
+[36m@@ -16,28 +16,4 @@[m [m$$ LANGUAGE plpgsql;[m
+ [m
+ COMMENT ON FUNCTION update_timestamp() IS[m
+ 'Generic trigger function that automatically updates the "updated_at" column to the current timestamp on row updates.[m
+[31m-Requires the target table to include an "updated_at" column.';[m
+[31m-[m
+[31m-[m
+[31m----------------------------------------------------------------------------------------------------------------[m
+[31m--- JSON SCHEMA BASE VALIDATOR[m
+[31m----------------------------------------------------------------------------------------------------------------[m
+[31m-[m
+[31m-CREATE OR REPLACE FUNCTION get_jsonschema_object_definition()[m
+[31m-RETURNS JSONB AS $$[m
+[31m-SELECT '{[m
+[31m-    "type": "object",[m
+[31m-    "properties": {[m
+[31m-        "type": { "const": "object" },[m
+[31m-        "properties": { "type": "object" },[m
+[31m-        "required": { "type": "array" },[m
+[31m-        "additionalProperties": { "type": "boolean" }[m
+[31m-    },[m
+[31m-    "required": ["type","properties","required","additionalProperties"],[m
+[31m-    "additionalProperties": false[m
+[31m-}'::jsonb;[m
+[31m-$$ LANGUAGE sql IMMUTABLE;[m
+[31m-[m
+[31m-COMMENT ON FUNCTION get_jsonschema_object_definition() IS[m
+[31m-'Returns a base JSON Schema definition used to validate that a JSONB column contains a valid JSON Schema object structure.[m
+[31m-Used to enforce that metadata_schema fields follow a consistent schema definition format.';[m
+\ No newline at end of file[m
+[32m+[m[32mRequires the target table to include an "updated_at" column.';[m
+\ No newline at end of file[m
+[1mdiff --git a/database/schema/tst.sql b/database/schema/tst.sql[m
+[1mdeleted file mode 100644[m
+[1mindex c940888..0000000[m
+[1m--- a/database/schema/tst.sql[m
+[1m+++ /dev/null[m
+[36m@@ -1,141 +0,0 @@[m
+[31m----------------------------------------------------------------------------------------------------------[m
+[31m--- RESET SCHEMA[m
+[31m----------------------------------------------------------------------------------------------------------[m
+[31m-[m
+[31m-DROP TABLE IF EXISTS accounts CASCADE;[m
+[31m-DROP TABLE IF EXISTS account_types CASCADE;[m
+[31m-[m
+[31m----------------------------------------------------------------------------------------------------------[m
+[31m--- ACCOUNT TYPES DEFINITION[m
+[31m----------------------------------------------------------------------------------------------------------[m
+[31m-[m
+[31m-CREATE TABLE account_types ([m
+[31m-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),[m
+[31m-    code VARCHAR(100) UNIQUE NOT NULL,[m
+[31m-    label VARCHAR(255) NOT NULL,[m
+[31m-    description TEXT,[m
+[31m-    is_liquid BOOLEAN NOT NULL DEFAULT FALSE,[m
+[31m-    metadata_schema JSONB NOT NULL,[m
+[31m-    enabled BOOLEAN NOT NULL DEFAULT TRUE,[m
+[31m-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),[m
+[31m-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),[m
+[31m-[m
+[31m-    CONSTRAINT chk_account_types_code_not_blank CHECK (length(trim(code)) > 0),[m
+[31m-    CONSTRAINT chk_account_types_label_not_blank CHECK (length(trim(label)) > 0),[m
+[31m-    CONSTRAINT chk_metadata_schema_valid[m
+[31m-    CHECK ([m
+[31m-        jsonb_matches_schema([m
+[31m-            get_jsonschema_object_definition(),[m
+[31m-            metadata_schema[m
+[31m-        )[m
+[31m-    )[m
+[31m-);[m
+[31m-[m
+[31m-ALTER TABLE account_types ENABLE ROW LEVEL SECURITY;[m
+[31m-[m
+[31m-COMMENT ON TABLE account_types IS 'Catalog of account types that define behavior, constraints, and metadata schema for accounts.';[m
+[31m-COMMENT ON COLUMN account_types.code IS 'Internal unique identifier used by backend logic (e.g., savings, credit, loan).';[m
+[31m-COMMENT ON COLUMN account_types.label IS 'Human-readable name used in UI.';[m
+[31m-COMMENT ON COLUMN account_types.description IS 'Optional description explaining the purpose of the account type.';[m
+[31m-COMMENT ON COLUMN account_types.is_liquid IS 'Indicates whether funds in this account type are immediately usable for transactions.';[m
+[31m-COMMENT ON COLUMN account_types.metadata_schema IS 'JSON Schema used to validate account metadata dynamically.';[m
+[31m-COMMENT ON COLUMN account_types.enabled IS 'Indicates whether this account type is available for use.';[m
+[31m-[m
+[31m-CREATE TRIGGER update_account_types_timestamp[m
+[31m-BEFORE UPDATE ON account_types[m
+[31m-FOR EACH ROW[m
+[31m-EXECUTE FUNCTION update_timestamp();[m
+[31m-[m
+[31m----------------------------------------------------------------------------------------------------------[m
+[31m--- ACCOUNTS DEFINITION[m
+[31m----------------------------------------------------------------------------------------------------------[m
+[31m-[m
+[31m-CREATE TABLE accounts ([m
+[31m-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),[m
+[31m-    user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,[m
+[31m-    currency_id UUID REFERENCES currencies(id) ON DELETE RESTRICT NOT NULL,[m
+[31m-    type_id UUID REFERENCES account_types(id) ON DELETE RESTRICT NOT NULL,[m
+[31m-    name VARCHAR(255) NOT NULL,[m
+[31m-    description TEXT,[m
+[31m-    balance NUMERIC(36, 2) NOT NULL DEFAULT 0.00,[m
+[31m-    block_balance NUMERIC(36, 2) NOT NULL DEFAULT 0.00,[m
+[31m-    metadata JSONB NOT NULL DEFAULT '{}',[m
+[31m-[m
+[31m-    allow_negative_balance BOOLEAN GENERATED ALWAYS AS (COALESCE((metadata->>'allow_negative_balance')::boolean, false)) STORED,[m
+[31m-    collateral_account_id UUID GENERATED ALWAYS AS ((metadata->>'collateral_account_id')::uuid) STORED,[m
+[31m-[m
+[31m-    enabled BOOLEAN NOT NULL DEFAULT TRUE,[m
+[31m-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),[m
+[31m-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),[m
+[31m-[m
+[31m-    CONSTRAINT chk_accounts_name_not_blank CHECK (length(trim(name)) > 0),[m
+[31m-    CONSTRAINT chk_accounts_balance_non_negative CHECK (allow_negative_balance OR balance >= 0),[m
+[31m-    CONSTRAINT chk_accounts_block_balance_non_negative CHECK (block_balance >= 0),[m
+[31m-    CONSTRAINT uq_accounts_user_name UNIQUE (user_id, name),[m
+[31m-    CONSTRAINT fk_collateral_account FOREIGN KEY (collateral_account_id) REFERENCES accounts(id)[m
+[31m-);[m
+[31m-[m
+[31m-ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;[m
+[31m-[m
+[31m-COMMENT ON TABLE accounts IS 'Represents financial accounts belonging to users, including balances, configuration metadata, and relationships to other accounts.';[m
+[31m-COMMENT ON COLUMN accounts.user_id IS 'Owner of the account.';[m
+[31m-COMMENT ON COLUMN accounts.currency_id IS 'Currency in which the account is denominated.';[m
+[31m-COMMENT ON COLUMN accounts.type_id IS 'Reference to account_types defining behavior and metadata schema.';[m
+[31m-COMMENT ON COLUMN accounts.name IS 'User-defined name for the account.';[m
+[31m-COMMENT ON COLUMN accounts.description IS 'Optional description for additional context.';[m
+[31m-COMMENT ON COLUMN accounts.balance IS 'Current available balance of the account.';[m
+[31m-COMMENT ON COLUMN accounts.block_balance IS 'Amount reserved or blocked from usage.';[m
+[31m-COMMENT ON COLUMN accounts.metadata IS 'Flexible JSONB field storing non-critical configuration and UI-related data.';[m
+[31m-COMMENT ON COLUMN accounts.allow_negative_balance IS 'Derived flag indicating whether the account can go below zero.';[m
+[31m-COMMENT ON COLUMN accounts.collateral_account_id IS 'Optional reference to another account used as collateral.';[m
+[31m-COMMENT ON COLUMN accounts.enabled IS 'Indicates whether the account is active and usable.';[m
+[31m-[m
+[31m-CREATE INDEX idx_accounts_user_id ON accounts(user_id);[m
+[31m-CREATE INDEX idx_accounts_user_currency ON accounts(user_id, currency_id);[m
+[31m-CREATE INDEX idx_accounts_user_type ON accounts (user_id, type_id);[m
+[31m-CREATE INDEX idx_accounts_user_enabled ON accounts(user_id, enabled);[m
+[31m-CREATE INDEX idx_accounts_collateral ON accounts(collateral_account_id);[m
+[31m-[m
+[31m-CREATE INDEX idx_accounts_collateral_not_null ON accounts(collateral_account_id)[m
+[31m-WHERE collateral_account_id IS NOT NULL;[m
+[31m-[m
+[31m-CREATE INDEX idx_accounts_metadata_gin ON accounts [m
+[31m-USING GIN (metadata);[m
+[31m-[m
+[31m-CREATE TRIGGER update_accounts_timestamp[m
+[31m-BEFORE UPDATE ON accounts[m
+[31m-FOR EACH ROW[m
+[31m-EXECUTE FUNCTION update_timestamp();[m
+[31m-[m
+[31m----------------------------------------------------------------------------------------------------------[m
+[31m--- VALIDATION METADATA FUNCTION[m
+[31m----------------------------------------------------------------------------------------------------------[m
+[31m-[m
+[31m-CREATE OR REPLACE FUNCTION validate_account_metadata()[m
+[31m-RETURNS trigger AS $$[m
+[31m-DECLARE[m
+[31m-    schema JSONB;[m
+[31m-BEGIN[m
+[31m-    SELECT metadata_schema[m
+[31m-    INTO schema[m
+[31m-    FROM account_types[m
+[31m-    WHERE id = NEW.type_id;[m
+[31m-[m
+[31m-    IF schema IS NOT NULL THEN[m
+[31m-        IF NOT jsonb_matches_schema(schema, NEW.metadata) THEN[m
+[31m-            RAISE EXCEPTION 'Invalid metadata for account type %', NEW.type_id;[m
+[31m-        END IF;[m
+[31m-    END IF;[m
+[31m-[m
+[31m-    RETURN NEW;[m
+[31m-END;[m
+[31m-$$ LANGUAGE plpgsql;[m
+[31m-[m
+[31m-COMMENT ON FUNCTION validate_account_metadata() IS[m
+[31m-'Trigger function that validates accounts.metadata against the JSON Schema defined in account_types.metadata_schema. [m
+[31m-Ensures that account metadata complies with the structure and constraints defined per account type before insert or update.';[m
+[31m-[m
+[31m-CREATE TRIGGER trigger_validate_account_metadata[m
+[31m-BEFORE INSERT OR UPDATE ON accounts[m
+[31m-FOR EACH ROW[m
+[31m-EXECUTE FUNCTION validate_account_metadata();[m
+\ No newline at end of file[m

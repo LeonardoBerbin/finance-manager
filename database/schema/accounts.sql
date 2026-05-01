@@ -14,28 +14,32 @@ CREATE TABLE account_types (
     code VARCHAR(100) UNIQUE NOT NULL,
     label VARCHAR(255) NOT NULL,
     description TEXT,
-    is_liquid BOOLEAN NOT NULL DEFAULT FALSE,
-    allowed_negative_balance BOOLEAN NOT NULL DEFAULT FALSE,
+    category VARCHAR(100) NOT NULL,
+    can_pay BOOLEAN NOT NULL DEFAULT FALSE,
+    can_collect BOOLEAN NOT NULL DEFAULT FALSE,
+    can_transfer BOOLEAN NOT NULL DEFAULT TRUE,
+    can_revalue BOOLEAN NOT NULL DEFAULT FALSE,
     metadata_definition JSONB NOT NULL DEFAULT '{}',
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     CONSTRAINT chk_account_types_code_not_blank CHECK (length(trim(code)) > 0),
+    CONSTRAINT chk_account_types_category_not_blank CHECK (length(trim(category)) > 0),
     CONSTRAINT chk_account_types_label_not_blank CHECK (length(trim(label)) > 0),
     CONSTRAINT chk_account_types_metadata_is_object CHECK (jsonb_typeof(metadata_definition) = 'object')
 );
 
 ALTER TABLE account_types ENABLE ROW LEVEL SECURITY;
 
-COMMENT ON TABLE account_types IS 'Defines account categories and their metadata contract used by backend validation logic.';
-COMMENT ON COLUMN account_types.code IS 'Internal identifier used by backend logic (e.g. savings, credit, loan).';
-COMMENT ON COLUMN account_types.label IS 'Human-readable label used in UI.';
-COMMENT ON COLUMN account_types.description IS 'Optional description of the account type.';
-COMMENT ON COLUMN account_types.is_liquid IS 'Indicates whether this account type represents liquid funds usable for transactions.';
-COMMENT ON COLUMN account_types.allowed_negative_balance IS 'Default rule indicating whether accounts of this type may go negative.';
-COMMENT ON COLUMN account_types.metadata_definition IS 'Backend-driven JSON contract defining allowed metadata structure for accounts of this type.';
-COMMENT ON COLUMN account_types.enabled IS 'Indicates whether this account type is available for creation.';
+COMMENT ON TABLE account_types IS 'Defines behavioral capabilities and classification of accounts. Used by backend to enforce transaction rules.';
+COMMENT ON COLUMN account_types.code IS 'Unique internal identifier for the account type (e.g., cash, credit, investment).';
+COMMENT ON COLUMN account_types.category IS 'High-level classification used primarily for UI grouping (e.g., assets, liabilities, investments).';
+COMMENT ON COLUMN account_types.can_pay IS 'Indicates whether accounts of this type can be used as source of funds in expenses.';
+COMMENT ON COLUMN account_types.can_collect IS 'Indicates whether accounts of this type can receive funds as income.';
+COMMENT ON COLUMN account_types.can_transfer IS 'Indicates whether accounts of this type can participate in internal transfers.';
+COMMENT ON COLUMN account_types.can_revalue IS 'Indicates whether the account supports non-cash adjustments (e.g., asset appreciation).';
+COMMENT ON COLUMN account_types.metadata_definition IS 'Backend-defined JSON contract describing allowed metadata structure for accounts of this type.';
 
 CREATE TRIGGER update_account_types_timestamp
 BEFORE UPDATE ON account_types
@@ -53,77 +57,45 @@ CREATE TABLE accounts (
     type_id UUID REFERENCES account_types(id) ON DELETE RESTRICT NOT NULL,
     name VARCHAR(255) NOT NULL,
     description TEXT,
-    balance NUMERIC(36, 2) NOT NULL DEFAULT 0.00,
-    blocked_balance NUMERIC(36, 2) NOT NULL DEFAULT 0.00,
+    current_balance NUMERIC(36, 2) NOT NULL DEFAULT 0.00,
+    reserved_balance NUMERIC(36, 2) NOT NULL DEFAULT 0.00,
+    overdraft_allowance NUMERIC(36, 2) NOT NULL DEFAULT 0.00,
+    available_balance NUMERIC(36, 2) GENERATED ALWAYS AS (GREATEST(current_balance - reserved_balance + overdraft_allowance, 0)) STORED,
+    fixed_transaction_fee NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    percentage_transaction_fee NUMERIC(4,2) NOT NULL DEFAULT 0.00,
     metadata JSONB NOT NULL DEFAULT '{}',
-    collateral_account_id UUID NULL,
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     CONSTRAINT chk_accounts_name_not_blank CHECK (length(trim(name)) > 0),
-    CONSTRAINT chk_accounts_blocked_balance_valid CHECK (blocked_balance >= 0 AND blocked_balance <= balance),
     CONSTRAINT uq_accounts_user_name UNIQUE (user_id, name),
-    CONSTRAINT chk_accounts_metadata_is_object CHECK (jsonb_typeof(metadata) = 'object'),
-    CONSTRAINT chk_accounts_no_self_collateral CHECK (collateral_account_id IS NULL OR collateral_account_id <> id),
-    CONSTRAINT fk_accounts_collateral
-        FOREIGN KEY (collateral_account_id)
-        REFERENCES accounts(id)
-        ON DELETE SET NULL
+    CONSTRAINT chk_accounts_current_balance_valid CHECK (current_balance >= -overdraft_allowance),
+    CONSTRAINT chk_accounts_reserved_balance_valid CHECK (reserved_balance >= 0 AND reserved_balance <= current_balance + overdraft_allowance),
+    CONSTRAINT chk_non_negative_values CHECK (overdraft_allowance >= 0 AND fixed_transaction_fee >= 0),
+    CONSTRAINT chk_percentage_fee_range CHECK (percentage_transaction_fee >= 0 AND percentage_transaction_fee <= 100),
+    CONSTRAINT chk_accounts_metadata_is_object CHECK (jsonb_typeof(metadata) = 'object')
 );
 
 ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;
 
-COMMENT ON TABLE accounts IS 'Represents user financial accounts including cash, credit, loans, investments and collateral relationships.';
-COMMENT ON COLUMN accounts.user_id IS 'Owner of the account.';
-COMMENT ON COLUMN accounts.currency_id IS 'Currency in which the account balance is denominated.';
-COMMENT ON COLUMN accounts.type_id IS 'Reference to account_types defining behavior and metadata contract.';
-COMMENT ON COLUMN accounts.name IS 'User-defined account name for display purposes.';
-COMMENT ON COLUMN accounts.description IS 'Optional descriptive field for user context.';
-COMMENT ON COLUMN accounts.balance IS 'Available balance of the account.';
-COMMENT ON COLUMN accounts.block_balance IS 'Reserved or blocked funds not available for spending.';
-COMMENT ON COLUMN accounts.metadata IS 'Flexible JSONB field validated by backend according to account_types.metadata_definition.';
-COMMENT ON COLUMN accounts.collateral_account_id IS 'Optional backup account used as collateral to cover debt or insufficient funds situations.';
-COMMENT ON COLUMN accounts.enabled IS 'Indicates whether the account is active and usable.';
+COMMENT ON TABLE accounts IS 'Represents user financial accounts with balance tracking, credit capacity, and operational constraints.';
+COMMENT ON COLUMN accounts.current_balance IS 'Actual balance of the account. Can be negative within overdraft limits.';
+COMMENT ON COLUMN accounts.reserved_balance IS 'Amount committed or reserved, reducing available funds. Can consume overdraft capacity.';
+COMMENT ON COLUMN accounts.overdraft_allowance IS 'Maximum negative balance allowed for the account. Defines credit capacity.';
+COMMENT ON COLUMN accounts.available_balance IS 'Computed available funds considering balance, reservations, and overdraft. Never negative.';
+COMMENT ON COLUMN accounts.fixed_transaction_fee IS 'Flat fee applied per transaction when applicable.';
+COMMENT ON COLUMN accounts.percentage_transaction_fee IS 'Percentage fee applied per transaction (0–100).';
+COMMENT ON COLUMN accounts.metadata IS 'Flexible JSONB field for non-critical, backend-interpreted account attributes.';
+COMMENT ON COLUMN accounts.enabled IS 'Indicates whether the account is active and can participate in operations.';
 
 CREATE INDEX idx_accounts_user_id ON accounts(user_id);
 CREATE INDEX idx_accounts_user_currency ON accounts(user_id, currency_id);
 CREATE INDEX idx_accounts_user_type ON accounts(user_id, type_id);
 CREATE INDEX idx_accounts_user_enabled ON accounts(user_id, enabled);
 CREATE INDEX idx_accounts_metadata_gin ON accounts USING GIN (metadata);
-CREATE INDEX idx_accounts_collateral ON accounts(collateral_account_id);
 
 CREATE TRIGGER update_accounts_timestamp
 BEFORE UPDATE ON accounts
 FOR EACH ROW
 EXECUTE FUNCTION update_timestamp();
-
----------------------------------------------------------------------------------------------------------
--- ACCOUNT BALANCE VALIDATION FUNCTION
----------------------------------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION validate_account_balance()
-RETURNS TRIGGER AS $$
-DECLARE
-    allow_negative BOOLEAN;
-BEGIN
-    SELECT allow_negative INTO allow_negative
-    FROM account_types WHERE id = NEW.type_id;
-
-    IF NOT COALESCE(allow_negative, FALSE) AND NEW.balance < 0 THEN
-        RAISE EXCEPTION 'negative balance not allowed for account type %', NEW.type_id;
-        USING ERRCODE = 'check_violation';
-    END IF;
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-COMMENT ON FUNCTION validate_account_balance() IS
-'Validates account balance rules based on account type configuration.
-Prevents negative balances when the account type does not allow it.';
-
-CREATE TRIGGER trigger_validate_account_balance
-BEFORE INSERT OR UPDATE ON accounts
-FOR EACH ROW
-EXECUTE FUNCTION validate_account_balance();
